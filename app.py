@@ -28,7 +28,7 @@ if st.button("Υπολογισμός Βέλτιστης Διαδρομής"):
     if len(lines) < 2:
         st.warning("Παρακαλώ εισάγετε τουλάχιστον την Αφετηρία και μία Στάση.")
     else:
-        geolocator = Nominatim(user_agent="my_route_app_depot")
+        geolocator = Nominatim(user_agent="my_route_app_depot_fix")
         locations_data = []
         
         with st.spinner("Εντοπισμός σημείων στον χάρτη..."):
@@ -92,7 +92,7 @@ if st.button("Υπολογισμός Βέλτιστης Διαδρομής"):
                     st.error("Αποτυχία επικοινωνίας με τον server χαρτών.")
                     st.stop()
 
-            # Επίλυση με Google OR-Tools κρατώντας σταθερή την Αφετηρία (Index 0)
+            # Επίλυση με Google OR-Tools κρατώντας σταθερή την Αφετηρία (Index 0) χωρίς να χάνεται η τελευταία στάση
             def solve_tsp_with_fixed_start(matrix):
                 num_nodes = len(matrix)
                 manager = pywrapcp.RoutingIndexManager(num_nodes, 1, 0) # 0 είναι η αφετηρία μας
@@ -118,24 +118,28 @@ if st.button("Υπολογισμός Βέλτιστης Διαδρομής"):
                     while not routing.IsEnd(index):
                         plan.append(manager.IndexToNode(index))
                         index = solution.Value(routing.NextVar(index))
-                    # Δεν κλείνουμε τον κύκλο πίσω στην αφετηρία, θέλουμε ανοιχτή διαδρομή παράδοσης
-                    return plan[:-1] # αφαιρούμε την επιστροφή στην αφετηρία στο τέλος
+                    # Επιστρέφουμε ολόκληρο το πλάνο εκτός από την επιστροφή στο 0 (αν υπάρχει)
+                    # Αλλά για ανοιχτή διαδρομή στο OR-Tools, παίρνουμε όλα τα μοναδικά σημεία
+                    return plan[:-1] if len(plan) == num_nodes + 1 else plan
                 return None
 
             with st.spinner("Βελτιστοποίηση διαδρομής παραδόσεων..."):
                 route_indices = solve_tsp_with_fixed_start(distance_matrix_int)
                 
             if route_indices:
-                # Η αφετηρία (index 0) μένει πρώτη, και ακολουθούν οι βελτιστοποιημένες στάσεις
-                optimized_df = df.iloc[route_indices].reset_index(drop=True)
+                # Διασφαλίζουμε ότι περιλαμβάνονται ΟΛΑ τα σημεία (αν κάποιο λείπει το προσθέτουμε στη λίστα)
+                full_route = route_indices.copy()
+                for i in range(len(df)):
+                    if i not in full_route:
+                        full_route.append(i)
                 
+                optimized_df = df.iloc[full_route].reset_index(drop=True)
                 st.session_state.optimized_df = optimized_df
                 
                 # Δημιουργία Χάρτη
                 m = folium.Map(location=[df.iloc[0]["lat"], df.iloc[0]["lng"]], zoom_start=13)
                 points = []
                 for idx, row in optimized_df.iterrows():
-                    # Η αφετηρία γίνεται κόκκινη (ή ξεχωριστή), οι υπόλοιπες μπλε
                     marker_color = "red" if idx == 0 else "blue"
                     popup_text = f"<b>ΑΦΕΤΗΡΙΑ: {row['address']}</b>" if idx == 0 else f"<b>Στάση #{idx}: {row['address']}</b>"
                     
@@ -164,7 +168,6 @@ if st.session_state.optimized_df is not None:
             else:
                 st.markdown(f"📦 **Στάση #{idx}:** {row['address']}")
         with col2:
-            # Κ κουμπί πλοήγησης για κάθε στάση
             map_link = f"https://www.google.com/maps/dir/?api=1&destination={row['lat']},{row['lng']}&travelmode=driving"
             st.markdown(f'<a href="{map_link}" target="_blank"><button style="background-color:#4CAF50; color:white; padding:6px 12px; border:none; border-radius:4px; cursor:pointer; font-size:14px; font-weight:bold;">🚗 Πλοήγηση</button></a>', unsafe_allow_html=True)
         st.divider()
