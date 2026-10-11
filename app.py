@@ -19,23 +19,25 @@ if "map_obj" not in st.session_state:
     st.session_state.map_obj = None
 
 # Εισαγωγή
-default_input = "Ακαδημίας 1, Αθήνα (Η Αφετηρία μου)\n8FVC+6W (Στάση 1)\n37.9755, 23.7348 (Στάση 2)"
-user_input = st.text_area("1η γραμμή = Αφετηρία | Οι υπόλοιπες = Στάσεις Παράδοσης (Διευθύνσεις, Plus Codes ή Συντεταγμένες):", value=default_input, height=150)
+default_input = "Λεωφόρος Δημοκρατίας 1, Λυκόβρυση (Η Αφετηρία μου)\n8FVC+6W (Στάση 1)\n37.9755, 23.7348 (Στάση 2)"
+user_input = st.text_area("1η γραμμή = Αφετηρία | Οι υπόλοιπες = Στάσεις Παράδοσης (Γράψτε οδό, αριθμό και περιοχή π.χ. Λυκόβρυση):", value=default_input, height=150)
 
 if st.button("Υπολογισμός Βέλτιστης Διαδρομής"):
+    lines = [line.strip() for line in user_input.split("\n"] if line.strip()] # type: ignore
+    # Διόρθωση λίστας γραμμών
     lines = [line.strip() for line in user_input.split("\n") if line.strip()]
     
     if len(lines) < 2:
         st.warning("Παρακαλώ εισάγετε τουλάχιστον την Αφετηρία και μία Στάση.")
     else:
-        geolocator = Nominatim(user_agent="my_route_app_depot_fix")
+        geolocator = Nominatim(user_agent="my_route_app_flexible")
         locations_data = []
         
         with st.spinner("Εντοπισμός σημείων στον χάρτη..."):
             for item in lines:
                 try:
                     lat, lng = None, None
-                    # Καθαρισμός κειμένου αν υπάρχει επεξήγηση στην παρένθεση (π.χ. "Ακαδημίας 1 (Αφετηρία)")
+                    # Καθαρισμός κειμένου αν υπάρχει επεξήγηση στην παρένθεση (π.χ. "Λυκόβρυση (Αφετηρία)")
                     clean_item = item.split("(")[0].strip()
                     item_clean_code = clean_item.split(",")[0].strip()
                     
@@ -44,22 +46,22 @@ if st.button("Υπολογισμός Βέλτιστης Διαδρομής"):
                         if olc.isValid(item_clean_code):
                             code_to_decode = item_clean_code
                             if not olc.isFull(code_to_decode):
-                                code_to_decode = olc.recoverNearest(code_to_decode, 37.9838, 23.7275)
+                                # Κέντρο αναφοράς Αττικής για σύντομους κωδικούς (π.χ. Λυκόβρυση/Αθήνα)
+                                code_to_decode = olc.recoverNearest(code_to_decode, 38.05, 23.77)
                             
                             if olc.isFull(code_to_decode):
                                 decoded = olc.decode(code_to_decode)
                                 lat, lng = decoded.latitudeCenter, decoded.longitudeCenter
                                 
-                    # 2. Έλεγχος αν είναι απλές συντεταγμένες (π.χ. "37.98, 23.72")
+                    # 2. Έλεγχος αν είναι απλές συντεταγμένες (π.χ. "38.06, 23.78")
                     elif "," in clean_item and all(p.strip().replace(".", "", 1).replace("-", "").isdigit() for p in clean_item.split(",")):
                         parts = clean_item.split(",")
                         lat = float(parts[0].strip())
                         lng = float(parts[1].strip())
                         
-                    # 3. Αν είναι κανονική διεύθυνση κειμένου
+                    # 3. Αν είναι κανονική διεύθυνση κειμένου (Ψάχνει ακριβώς αυτό που δίνετε, χωρίς να προσθέτει Αθήνα αναγκαστικά)
                     else:
-                        search_query = clean_item if any(c in clean_item.lower() for c in ["αθήνα", "athens"]) else f"{clean_item}, Αθήνα"
-                        location = geolocator.geocode(search_query)
+                        location = geolocator.geocode(clean_item)
                         if location:
                             lat, lng = location.latitude, location.longitude
                             
@@ -70,7 +72,7 @@ if st.button("Υπολογισμός Βέλτιστης Διαδρομής"):
                             "lng": lng
                         })
                     else:
-                        st.error(f"Δεν μπόρεσε να εντοπιστεί το σημείο: {item}")
+                        st.error(f"Δεν μπόρεσε να εντοπιστεί το σημείο: {item}. Δοκιμάστε να προσθέσετε πόλη/περιοχή (π.χ. Λυκόβρυση).")
                         
                 except Exception as e:
                     st.error(f"Σφάλμα για το σημείο '{item}': {e}")
@@ -92,7 +94,7 @@ if st.button("Υπολογισμός Βέλτιστης Διαδρομής"):
                     st.error("Αποτυχία επικοινωνίας με τον server χαρτών.")
                     st.stop()
 
-            # Επίλυση με Google OR-Tools κρατώντας σταθερή την Αφετηρία (Index 0) χωρίς να χάνεται η τελευταία στάση
+            # Επίλυση με Google OR-Tools κρατώντας σταθερή την Αφετηρία (Index 0)
             def solve_tsp_with_fixed_start(matrix):
                 num_nodes = len(matrix)
                 manager = pywrapcp.RoutingIndexManager(num_nodes, 1, 0) # 0 είναι η αφετηρία μας
@@ -118,8 +120,6 @@ if st.button("Υπολογισμός Βέλτιστης Διαδρομής"):
                     while not routing.IsEnd(index):
                         plan.append(manager.IndexToNode(index))
                         index = solution.Value(routing.NextVar(index))
-                    # Επιστρέφουμε ολόκληρο το πλάνο εκτός από την επιστροφή στο 0 (αν υπάρχει)
-                    # Αλλά για ανοιχτή διαδρομή στο OR-Tools, παίρνουμε όλα τα μοναδικά σημεία
                     return plan[:-1] if len(plan) == num_nodes + 1 else plan
                 return None
 
@@ -127,7 +127,6 @@ if st.button("Υπολογισμός Βέλτιστης Διαδρομής"):
                 route_indices = solve_tsp_with_fixed_start(distance_matrix_int)
                 
             if route_indices:
-                # Διασφαλίζουμε ότι περιλαμβάνονται ΟΛΑ τα σημεία (αν κάποιο λείπει το προσθέτουμε στη λίστα)
                 full_route = route_indices.copy()
                 for i in range(len(df)):
                     if i not in full_route:
@@ -136,7 +135,7 @@ if st.button("Υπολογισμός Βέλτιστης Διαδρομής"):
                 optimized_df = df.iloc[full_route].reset_index(drop=True)
                 st.session_state.optimized_df = optimized_df
                 
-                # Δημιουργία Χάρτη
+                # Δημιουργία Χάρτη με κέντρο την αφετηρία
                 m = folium.Map(location=[df.iloc[0]["lat"], df.iloc[0]["lng"]], zoom_start=13)
                 points = []
                 for idx, row in optimized_df.iterrows():
