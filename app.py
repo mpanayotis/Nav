@@ -9,7 +9,7 @@ from ortools.constraint_solver import pywrapcp
 
 # Τίτλος Εφαρμογής
 st.set_page_config(page_title="Route Optimizer", layout="wide")
-st.title("🚚 Custom Route Optimizer (Διευθύνσεις, Συντεταγμένες & Plus Codes)")
+st.title("🚚 Custom Route Optimizer (Διευθύνσεις & Plus Codes)")
 
 # Αρχικοποίηση session state
 if "optimized_df" not in st.session_state:
@@ -27,7 +27,7 @@ if st.button("Υπολογισμός Βέλτιστης Διαδρομής"):
     if len(lines) < 2:
         st.warning("Παρακαλώ εισάγετε τουλάχιστον 2 σημεία.")
     else:
-        geolocator = Nominatim(user_agent="my_route_app_final_v3")
+        geolocator = Nominatim(user_agent="my_route_app_plus_fix")
         locations_data = []
         
         with st.spinner("Εντοπισμός σημείων στον χάρτη..."):
@@ -38,8 +38,14 @@ if st.button("Υπολογισμός Βέλτιστης Διαδρομής"):
                     # 1. Έλεγχος αν είναι Plus Code (περιέχει '+')
                     if "+" in item:
                         code = item.split(",")[0].strip()
-                        # Χρήση του δωρεάν Google Plus Codes API για τέλεια αποκωδικοποίηση
-                        api_url = f"https://plus.codes/api?address={code}"
+                        
+                        # Αν είναι σύντομος κωδικός (δεν έχει κενό ή είναι μικρός, π.χ. 8FVC+6W)
+                        # τον συνδυάζουμε με την Αθήνα μέσω του Plus Codes API
+                        if len(code) < 10:
+                            api_url = f"https://plus.codes/api?address={code},%20Athens"
+                        else:
+                            api_url = f"https://plus.codes/api?address={code}"
+                            
                         resp = requests.get(api_url).json()
                         if resp.get("status") == "OK" and "geometry" in resp:
                             lat = resp["geometry"]["location"]["lat"]
