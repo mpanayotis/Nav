@@ -36,17 +36,16 @@ if st.button("Υπολογισμός Βέλτιστης Διαδρομής"):
                 try:
                     lat, lng = None, None
                     
-                    # 1. Έλεγχος αν είναι Plus Code (περιέχει '+' και δεν είναι απλή διεύθυνση)
+                    # 1. Έλεγχος αν είναι Plus Code (περιέχει '+')
                     if "+" in item:
-                        code = item.split(",")[0].strip() # Παίρνουμε το κομμάτι πριν το κόμμα αν υπάρχει
-                        # Ανεξάρτητα αν είναι full ή short code (τα short codes χρειάζονται reference, οπότε αν είναι full π.χ. 8FVC9G8F+6W)
+                        code = item.split(",")[0].strip()
                         if olc.isValid(code):
                             if olc.isFull(code):
                                 decoded = olc.decode(code)
                                 lat, lng = decoded.latitudeCenter, decoded.longitudeCenter
                             else:
-                                # Αν είναι short code, το συνδυάζουμε με κέντρο την Αθήνα (37.9838, 23.7275)
-                                decoded = olc.recover(code, 37.9838, 23.7275)
+                                # Διόρθωση εδώ: Χρήση recoverNearest αντί για recover
+                                decoded = olc.recoverNearest(code, 37.9838, 23.7275)
                                 lat, lng = decoded.latitudeCenter, decoded.longitudeCenter
                     
                     # 2. Έλεγχος αν είναι απλές συντεταγμένες (π.χ. "37.98, 23.72")
@@ -130,7 +129,7 @@ if st.button("Υπολογισμός Βέλτιστης Διαδρομής"):
                 st.session_state.optimized_df = optimized_df
                 
                 # Δημιουργία Χάρτη
-                m = folium.Map(location=[df.iloc[0]["lat"], df.iloc[0]["Lng"] if "Lng" in df.columns else df.iloc[0]["lng"]], zoom_start=13)
+                m = folium.Map(location=[df.iloc[0]["lat"], df.iloc[0]["lng"]], zoom_start=13)
                 points = []
                 for idx, row in optimized_df.iterrows():
                     folium.Marker(
