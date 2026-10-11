@@ -120,33 +120,18 @@ if st.button("Υπολογισμός Βέλτιστης Διαδρομής"):
 # Εμφάνιση αποτελεσμάτων από το session_state
 if st.session_state.optimized_df is not None:
     st.success("Η διαδρομή βελτιστοποιήθηκε επιτυχώς!")
-    st.subheader("📍 Σειρά επίσκεψης σημείων:")
+    st.subheader("📍 Σειρά επίσκεψης σημείων & Πλοήγηση:")
     
-    # Μετονομασία στηλών για την εμφάνιση
-    display_df = st.session_state.optimized_df.rename(columns={
-        "address": "Διεύθυνση",
-        "lat": "Lat",
-        "lng": "Lng"
-    })
-    st.dataframe(display_df[["Διεύθυνση", "Lat", "Lng"]])
-    
-    # --- ΔΗΜΙΟΥΡΓΙΑ ΣΥΝΔΕΣΜΟΥ GOOGLE MAPS ---
-    addresses_list = st.session_state.optimized_df["address"].tolist()
-    
-    if len(addresses_list) >= 2:
-        origin = addresses_list[0].replace(" ", "+")
-        destination = addresses_list[-1].replace(" ", "+")
-        
-        if len(addresses_list) > 2:
-            waypoints_list = [addr.replace(" ", "+") for addr in addresses_list[1:-1]]
-            waypoints = "|".join(waypoints_list)
-            gmaps_url = f"https://www.google.com/maps/dir/?api=1&origin={origin}&destination={destination}&waypoints={waypoints}&travelmode=driving"
-        else:
-            gmaps_url = f"https://www.google.com/maps/dir/?api=1&origin={origin}&destination={destination}&travelmode=driving"
-            
-        st.markdown(f'<a href="{gmaps_url}" target="_blank"><button style="background-color:#4CAF50; color:white; padding:10px 20px; border:none; border-radius:5px; cursor:pointer; font-size:16px; font-weight:bold;">🗺️ Άνοιγμα Διαδρομής σε Google Maps</button></a>', unsafe_allow_html=True)
+    # Εμφάνιση κάθε στάσης με το δικό της κουμπί πλοήγησης
+    for idx, row in st.session_state.optimized_df.iterrows():
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.markdown(f"**Στάση #{idx}:** {row['address']}")
+        with col2:
+            # Δημιουργία link πλοήγησης για τη συγκεκριμένη συντεταγμένη/διεύθυνση
+            map_link = f"https://www.google.com/maps/dir/?api=1&destination={row['lat']},{row['lng']}&travelmode=driving"
+            st.markdown(f'<a href="{map_link}" target="_blank"><button style="background-color:#4CAF50; color:white; padding:6px 12px; border:none; border-radius:4px; cursor:pointer; font-size:14px; font-weight:bold;">🚗 Πλοήγηση</button></a>', unsafe_allow_html=True)
+        st.divider()
 
-    st.markdown("<br>", unsafe_allow_html=True)
-    
     st.subheader("🗺️ Οπτικοποίηση στον Χάρτη")
     st_folium(st.session_state.map_obj, width=700, height=500, returned_objects=[])
