@@ -28,7 +28,7 @@ if st.button("Υπολογισμός Βέλτιστης Διαδρομής"):
     if len(lines) < 2:
         st.warning("Παρακαλώ εισάγετε τουλάχιστον 2 σημεία.")
     else:
-        geolocator = Nominatim(user_agent="my_route_app_final")
+        geolocator = Nominatim(user_agent="my_route_app_final_v2")
         locations_data = []
         
         with st.spinner("Εντοπισμός σημείων στον χάρτη..."):
@@ -42,11 +42,11 @@ if st.button("Υπολογισμός Βέλτιστης Διαδρομής"):
                         if olc.isValid(code):
                             if olc.isFull(code):
                                 decoded = olc.decode(code)
-                                lat, lng = decoded.latitudeCenter, decoded.longitudeCenter
+                                lat, lng = decoded.latCenter, decoded.lngCenter
                             else:
-                                # Διόρθωση εδώ: Χρήση recoverNearest αντί για recover
+                                # Χρήση latCenter και lngCenter
                                 decoded = olc.recoverNearest(code, 37.9838, 23.7275)
-                                lat, lng = decoded.latitudeCenter, decoded.longitudeCenter
+                                lat, lng = decoded.latCenter, decoded.lngCenter
                     
                     # 2. Έλεγχος αν είναι απλές συντεταγμένες (π.χ. "37.98, 23.72")
                     elif "," in item and all(p.strip().replace(".", "", 1).replace("-", "").isdigit() for p in item.split(",")):
