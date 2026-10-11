@@ -28,7 +28,7 @@ if st.button("Υπολογισμός Βέλτιστης Διαδρομής"):
     if len(lines) < 2:
         st.warning("Παρακαλώ εισάγετε τουλάχιστον 2 σημεία.")
     else:
-        geolocator = Nominatim(user_agent="my_route_app_perfect")
+        geolocator = Nominatim(user_agent="my_route_app_final_fixed")
         locations_data = []
         
         with st.spinner("Εντοπισμός σημείων στον χάρτη..."):
@@ -47,8 +47,8 @@ if st.button("Υπολογισμός Βέλτιστης Διαδρομής"):
                             
                             if olc.isFull(code_to_decode):
                                 decoded = olc.decode(code_to_decode)
-                                # Η λίστα επιστρέφει στο index 4 το latitude center και στο index 5 το longitude center
-                                lat, lng = decoded[4], decoded[5]
+                                # Σωστή ανάγνωση ιδιοτήτων CodeArea αντικειμένου
+                                lat, lng = decoded.latitudeCenter, decoded.longitudeCenter
                                 
                     # 2. Έλεγχος αν είναι απλές συντεταγμένες (π.χ. "37.98, 23.72")
                     elif "," in item and all(p.strip().replace(".", "", 1).replace("-", "").isdigit() for p in item.split(",")):
