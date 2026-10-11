@@ -10,7 +10,7 @@ from openlocationcode import openlocationcode as olc
 
 # Τίτλος Εφαρμογής
 st.set_page_config(page_title="Route Optimizer", layout="wide")
-st.title("🚚 Custom Route Optimizer (Plus Codes & Coordinates)")
+st.title("🚚 Smart Route Optimizer (Αφετηρία & Στάσεις Παράδοσης)")
 
 # Αρχικοποίηση session state
 if "optimized_df" not in st.session_state:
@@ -18,47 +18,47 @@ if "optimized_df" not in st.session_state:
 if "map_obj" not in st.session_state:
     st.session_state.map_obj = None
 
-# Εισαγωγή (Διευθύνσεις, Συντεταγμένες ή Plus Codes)
-default_input = "Ακαδημίας 1, Αθήνα\n8FVC+6W\n37.9755, 23.7348"
-user_input = st.text_area("Σημεία (Διευθύνσεις, Plus Codes ή Συντεταγμένες, μία ανά γραμμή):", value=default_input, height=150)
+# Εισαγωγή
+default_input = "Ακαδημίας 1, Αθήνα (Η Αφετηρία μου)\n8FVC+6W (Στάση 1)\n37.9755, 23.7348 (Στάση 2)"
+user_input = st.text_area("1η γραμμή = Αφετηρία | Οι υπόλοιπες = Στάσεις Παράδοσης (Διευθύνσεις, Plus Codes ή Συντεταγμένες):", value=default_input, height=150)
 
 if st.button("Υπολογισμός Βέλτιστης Διαδρομής"):
     lines = [line.strip() for line in user_input.split("\n") if line.strip()]
     
     if len(lines) < 2:
-        st.warning("Παρακαλώ εισάγετε τουλάχιστον 2 σημεία.")
+        st.warning("Παρακαλώ εισάγετε τουλάχιστον την Αφετηρία και μία Στάση.")
     else:
-        geolocator = Nominatim(user_agent="my_route_app_final_fixed")
+        geolocator = Nominatim(user_agent="my_route_app_depot")
         locations_data = []
         
         with st.spinner("Εντοπισμός σημείων στον χάρτη..."):
             for item in lines:
                 try:
                     lat, lng = None, None
-                    item_clean = item.split(",")[0].strip()
+                    # Καθαρισμός κειμένου αν υπάρχει επεξήγηση στην παρένθεση (π.χ. "Ακαδημίας 1 (Αφετηρία)")
+                    clean_item = item.split("(")[0].strip()
+                    item_clean_code = clean_item.split(",")[0].strip()
                     
                     # 1. Έλεγχος αν είναι Plus Code (περιέχει '+')
-                    if "+" in item_clean:
-                        if olc.isValid(item_clean):
-                            code_to_decode = item_clean
-                            # Αν είναι σύντομος κωδικός (π.χ. 8FVC+6W), τον μετατρέπουμε σε πλήρη με βάση την Αθήνα
+                    if "+" in item_clean_code:
+                        if olc.isValid(item_clean_code):
+                            code_to_decode = item_clean_code
                             if not olc.isFull(code_to_decode):
                                 code_to_decode = olc.recoverNearest(code_to_decode, 37.9838, 23.7275)
                             
                             if olc.isFull(code_to_decode):
                                 decoded = olc.decode(code_to_decode)
-                                # Σωστή ανάγνωση ιδιοτήτων CodeArea αντικειμένου
                                 lat, lng = decoded.latitudeCenter, decoded.longitudeCenter
                                 
                     # 2. Έλεγχος αν είναι απλές συντεταγμένες (π.χ. "37.98, 23.72")
-                    elif "," in item and all(p.strip().replace(".", "", 1).replace("-", "").isdigit() for p in item.split(",")):
-                        parts = item.split(",")
+                    elif "," in clean_item and all(p.strip().replace(".", "", 1).replace("-", "").isdigit() for p in clean_item.split(",")):
+                        parts = clean_item.split(",")
                         lat = float(parts[0].strip())
                         lng = float(parts[1].strip())
                         
                     # 3. Αν είναι κανονική διεύθυνση κειμένου
                     else:
-                        search_query = item if any(c in item.lower() for c in ["αθήνα", "athens"]) else f"{item}, Αθήνα"
+                        search_query = clean_item if any(c in clean_item.lower() for c in ["αθήνα", "athens"]) else f"{clean_item}, Αθήνα"
                         location = geolocator.geocode(search_query)
                         if location:
                             lat, lng = location.latitude, location.longitude
@@ -92,9 +92,10 @@ if st.button("Υπολογισμός Βέλτιστης Διαδρομής"):
                     st.error("Αποτυχία επικοινωνίας με τον server χαρτών.")
                     st.stop()
 
-            # Επίλυση με Google OR-Tools (TSP)
-            def solve_tsp(matrix):
-                manager = pywrapcp.RoutingIndexManager(len(matrix), 1, 0)
+            # Επίλυση με Google OR-Tools κρατώντας σταθερή την Αφετηρία (Index 0)
+            def solve_tsp_with_fixed_start(matrix):
+                num_nodes = len(matrix)
+                manager = pywrapcp.RoutingIndexManager(num_nodes, 1, 0) # 0 είναι η αφετηρία μας
                 routing = pywrapcp.RoutingModel(manager)
 
                 def distance_callback(from_index, to_index):
@@ -117,16 +118,16 @@ if st.button("Υπολογισμός Βέλτιστης Διαδρομής"):
                     while not routing.IsEnd(index):
                         plan.append(manager.IndexToNode(index))
                         index = solution.Value(routing.NextVar(index))
-                    plan.append(manager.IndexToNode(index))
-                    return plan
+                    # Δεν κλείνουμε τον κύκλο πίσω στην αφετηρία, θέλουμε ανοιχτή διαδρομή παράδοσης
+                    return plan[:-1] # αφαιρούμε την επιστροφή στην αφετηρία στο τέλος
                 return None
 
-            with st.spinner("Βελτιστοποίηση διαδρομής με Google OR-Tools..."):
-                route_indices = solve_tsp(distance_matrix_int)
+            with st.spinner("Βελτιστοποίηση διαδρομής παραδόσεων..."):
+                route_indices = solve_tsp_with_fixed_start(distance_matrix_int)
                 
             if route_indices:
-                optimized_df = df.iloc[route_indices[:-1]].reset_index(drop=True)
-                optimized_df.index = optimized_df.index + 1
+                # Η αφετηρία (index 0) μένει πρώτη, και ακολουθούν οι βελτιστοποιημένες στάσεις
+                optimized_df = df.iloc[route_indices].reset_index(drop=True)
                 
                 st.session_state.optimized_df = optimized_df
                 
@@ -134,10 +135,14 @@ if st.button("Υπολογισμός Βέλτιστης Διαδρομής"):
                 m = folium.Map(location=[df.iloc[0]["lat"], df.iloc[0]["lng"]], zoom_start=13)
                 points = []
                 for idx, row in optimized_df.iterrows():
+                    # Η αφετηρία γίνεται κόκκινη (ή ξεχωριστή), οι υπόλοιπες μπλε
+                    marker_color = "red" if idx == 0 else "blue"
+                    popup_text = f"<b>ΑΦΕΤΗΡΙΑ: {row['address']}</b>" if idx == 0 else f"<b>Στάση #{idx}: {row['address']}</b>"
+                    
                     folium.Marker(
                         [row["lat"], row["lng"]],
-                        popup=f"<b>#{idx}: {row['address']}</b>",
-                        icon=folium.Icon(color="red" if idx == 1 else "blue", icon="info-sign")
+                        popup=popup_text,
+                        icon=folium.Icon(color=marker_color, icon="info-sign" if idx > 0 else "home")
                     ).add_to(m)
                     points.append([row["lat"], row["lng"]])
                 
@@ -154,8 +159,12 @@ if st.session_state.optimized_df is not None:
     for idx, row in st.session_state.optimized_df.iterrows():
         col1, col2 = st.columns([3, 1])
         with col1:
-            st.markdown(f"**Στάση #{idx}:** {row['address']}")
+            if idx == 0:
+                st.markdown(f"🏠 **ΑΦΕΤΗΡΙΑ (Τοποθεσία σας):** {row['address']}")
+            else:
+                st.markdown(f"📦 **Στάση #{idx}:** {row['address']}")
         with col2:
+            # Κ κουμπί πλοήγησης για κάθε στάση
             map_link = f"https://www.google.com/maps/dir/?api=1&destination={row['lat']},{row['lng']}&travelmode=driving"
             st.markdown(f'<a href="{map_link}" target="_blank"><button style="background-color:#4CAF50; color:white; padding:6px 12px; border:none; border-radius:4px; cursor:pointer; font-size:14px; font-weight:bold;">🚗 Πλοήγηση</button></a>', unsafe_allow_html=True)
         st.divider()
