@@ -6,11 +6,10 @@ import folium
 from streamlit_folium import st_folium
 from ortools.constraint_solver import routing_enums_pb2
 from ortools.constraint_solver import pywrapcp
-from openlocationcode import openlocationcode as olc
 
 # Τίτλος Εφαρμογής
 st.set_page_config(page_title="Route Optimizer", layout="wide")
-st.title("🚚 Custom Route Optimizer (Plus Codes & Coordinates)")
+st.title("🚚 Custom Route Optimizer (Διευθύνσεις, Συντεταγμένες & Plus Codes)")
 
 # Αρχικοποίηση session state
 if "optimized_df" not in st.session_state:
@@ -28,7 +27,7 @@ if st.button("Υπολογισμός Βέλτιστης Διαδρομής"):
     if len(lines) < 2:
         st.warning("Παρακαλώ εισάγετε τουλάχιστον 2 σημεία.")
     else:
-        geolocator = Nominatim(user_agent="my_route_app_final_v2")
+        geolocator = Nominatim(user_agent="my_route_app_final_v3")
         locations_data = []
         
         with st.spinner("Εντοπισμός σημείων στον χάρτη..."):
@@ -39,15 +38,13 @@ if st.button("Υπολογισμός Βέλτιστης Διαδρομής"):
                     # 1. Έλεγχος αν είναι Plus Code (περιέχει '+')
                     if "+" in item:
                         code = item.split(",")[0].strip()
-                        if olc.isValid(code):
-                            if olc.isFull(code):
-                                decoded = olc.decode(code)
-                                lat, lng = decoded.latCenter, decoded.lngCenter
-                            else:
-                                # Χρήση latCenter και lngCenter
-                                decoded = olc.recoverNearest(code, 37.9838, 23.7275)
-                                lat, lng = decoded.latCenter, decoded.lngCenter
-                    
+                        # Χρήση του δωρεάν Google Plus Codes API για τέλεια αποκωδικοποίηση
+                        api_url = f"https://plus.codes/api?address={code}"
+                        resp = requests.get(api_url).json()
+                        if resp.get("status") == "OK" and "geometry" in resp:
+                            lat = resp["geometry"]["location"]["lat"]
+                            lng = resp["geometry"]["location"]["lng"]
+                            
                     # 2. Έλεγχος αν είναι απλές συντεταγμένες (π.χ. "37.98, 23.72")
                     elif "," in item and all(p.strip().replace(".", "", 1).replace("-", "").isdigit() for p in item.split(",")):
                         parts = item.split(",")
