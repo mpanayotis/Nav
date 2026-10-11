@@ -6,10 +6,11 @@ import folium
 from streamlit_folium import st_folium
 from ortools.constraint_solver import routing_enums_pb2
 from ortools.constraint_solver import pywrapcp
+from openlocationcode import openlocationcode as olc
 
 # Τίτλος Εφαρμογής
 st.set_page_config(page_title="Route Optimizer", layout="wide")
-st.title("🚚 Custom Route Optimizer (Διευθύνσεις & Plus Codes)")
+st.title("🚚 Custom Route Optimizer (Plus Codes & Coordinates)")
 
 # Αρχικοποίηση session state
 if "optimized_df" not in st.session_state:
@@ -18,7 +19,7 @@ if "map_obj" not in st.session_state:
     st.session_state.map_obj = None
 
 # Εισαγωγή (Διευθύνσεις, Συντεταγμένες ή Plus Codes)
-default_input = "Ακαδημίας 1, Αθήνα\n8FVC9G8F+6W\n37.9755, 23.7348"
+default_input = "Ακαδημίας 1, Αθήνα\n8FVC+6W\n37.9755, 23.7348"
 user_input = st.text_area("Σημεία (Διευθύνσεις, Plus Codes ή Συντεταγμένες, μία ανά γραμμή):", value=default_input, height=150)
 
 if st.button("Υπολογισμός Βέλτιστης Διαδρομής"):
@@ -27,30 +28,28 @@ if st.button("Υπολογισμός Βέλτιστης Διαδρομής"):
     if len(lines) < 2:
         st.warning("Παρακαλώ εισάγετε τουλάχιστον 2 σημεία.")
     else:
-        geolocator = Nominatim(user_agent="my_route_app_plus_fix")
+        geolocator = Nominatim(user_agent="my_route_app_perfect")
         locations_data = []
         
         with st.spinner("Εντοπισμός σημείων στον χάρτη..."):
             for item in lines:
                 try:
                     lat, lng = None, None
+                    item_clean = item.split(",")[0].strip()
                     
                     # 1. Έλεγχος αν είναι Plus Code (περιέχει '+')
-                    if "+" in item:
-                        code = item.split(",")[0].strip()
-                        
-                        # Αν είναι σύντομος κωδικός (δεν έχει κενό ή είναι μικρός, π.χ. 8FVC+6W)
-                        # τον συνδυάζουμε με την Αθήνα μέσω του Plus Codes API
-                        if len(code) < 10:
-                            api_url = f"https://plus.codes/api?address={code},%20Athens"
-                        else:
-                            api_url = f"https://plus.codes/api?address={code}"
+                    if "+" in item_clean:
+                        if olc.isValid(item_clean):
+                            code_to_decode = item_clean
+                            # Αν είναι σύντομος κωδικός (π.χ. 8FVC+6W), τον μετατρέπουμε σε πλήρη με βάση την Αθήνα
+                            if not olc.isFull(code_to_decode):
+                                code_to_decode = olc.recoverNearest(code_to_decode, 37.9838, 23.7275)
                             
-                        resp = requests.get(api_url).json()
-                        if resp.get("status") == "OK" and "geometry" in resp:
-                            lat = resp["geometry"]["location"]["lat"]
-                            lng = resp["geometry"]["location"]["lng"]
-                            
+                            if olc.isFull(code_to_decode):
+                                decoded = olc.decode(code_to_decode)
+                                # Η λίστα επιστρέφει στο index 4 το latitude center και στο index 5 το longitude center
+                                lat, lng = decoded[4], decoded[5]
+                                
                     # 2. Έλεγχος αν είναι απλές συντεταγμένες (π.χ. "37.98, 23.72")
                     elif "," in item and all(p.strip().replace(".", "", 1).replace("-", "").isdigit() for p in item.split(",")):
                         parts = item.split(",")
