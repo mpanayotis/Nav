@@ -9,7 +9,7 @@ from ortools.constraint_solver import pywrapcp
 
 # Τίτλος Εφαρμογής
 st.set_page_config(page_title="Route Optimizer", layout="wide")
-st.title("🚚 Custom Route Optimizer (Python & OR-Tools)")
+st.title("🚚 Custom Route Optimizer (με υποστήριξη Plus Codes)")
 
 # Αρχικοποίηση session state
 if "optimized_df" not in st.session_state:
@@ -17,35 +17,41 @@ if "optimized_df" not in st.session_state:
 if "map_obj" not in st.session_state:
     st.session_state.map_obj = None
 
-# Εισαγωγή διευθύνσεων
-default_addresses = "Ακαδημίας 1, Αθήνα\nΣταδίου 15, Αθήνα\nΛεωφόρος Συγγρού 100, Αθήνα\nΠανεπιστημίου 30, Αθήνα"
-user_input = st.text_area("Διευθύνσεις (Η πρώτη είναι η Αφετηρία/Αποθήκη σας):", value=default_addresses, height=150)
+# Εισαγωγή διευθύνσεων ή Plus Codes
+default_input = "Ακαδημίας 1, Αθήνα\n8FVC9G8F+6W, Αθήνα\nΣταδίου 15, Αθήνα"
+user_input = st.text_area("Διευθύνσεις ή Plus Codes (μία ανά γραμμή, η πρώτη είναι η Αφετηρία):", value=default_input, height=150)
 
 if st.button("Υπολογισμός Βέλτιστης Διαδρομής"):
-    addresses = [line.strip() for line in user_input.split("\n") if line.strip()]
+    lines = [line.strip() for line in user_input.split("\n") if line.strip()]
     
-    if len(addresses) < 2:
-        st.warning("Παρακαλώ εισάγετε τουλάχιστον 2 διευθύνσεις.")
+    if len(lines) < 2:
+        st.warning("Παρακαλώ εισάγετε τουλάχιστον 2 σημεία.")
     else:
-        geolocator = Nominatim(user_agent="my_route_app_v4")
+        geolocator = Nominatim(user_agent="my_route_app_plus_codes")
         locations_data = []
         
         with st.spinner("Εντοπισμός σημείων στον χάρτη..."):
-            for addr in addresses:
+            for item in lines:
                 try:
-                    location = geolocator.geocode(addr)
+                    # Αν η γραμμή περιέχει Plus Code (συνήθως έχει σύμβολο '+' και γράμματα/αριθμούς)
+                    # φροντίζουμε να το ψάξουμε σωστά. Αν δεν έχει πόλη, προσθέτουμε την Αθήνα.
+                    search_query = item
+                    if "+" in item and not any(city in item.lower() for city in ["αθήνα", "athens", "attica"]):
+                        search_query = f"{item}, Αθήνα"
+                        
+                    location = geolocator.geocode(search_query)
                     if location:
                         locations_data.append({
-                            "address": addr,
+                            "address": item,
                             "lat": location.latitude,
                             "lng": location.longitude
                         })
                     else:
-                        st.error(f"Δεν βρέθηκε η διεύθυνση: {addr}")
+                        st.error(f"Δεν βρέθηκε το σημείο: {item}")
                 except Exception as e:
-                    st.error(f"Σφάλμα για {addr}: {e}")
+                    st.error(f"Σφάλμα για {item}: {e}")
                     
-        if len(locations_data) == len(addresses):
+        if len(locations_data) == len(lines):
             df = pd.DataFrame(locations_data)
             
             # Δημιουργία πίνακα αποστάσεων (Distance Matrix) μέσω OSRM API (Δωρεάν)
@@ -122,13 +128,12 @@ if st.session_state.optimized_df is not None:
     st.success("Η διαδρομή βελτιστοποιήθηκε επιτυχώς!")
     st.subheader("📍 Σειρά επίσκεψης σημείων & Πλοήγηση:")
     
-    # Εμφάνιση κάθε στάσης με το δικό της κουμπί πλοήγησης
+    # Εμφάνιση κάθε στάσης με το κουμπί πλοήγησης
     for idx, row in st.session_state.optimized_df.iterrows():
         col1, col2 = st.columns([3, 1])
         with col1:
             st.markdown(f"**Στάση #{idx}:** {row['address']}")
         with col2:
-            # Δημιουργία link πλοήγησης για τη συγκεκριμένη συντεταγμένη/διεύθυνση
             map_link = f"https://www.google.com/maps/dir/?api=1&destination={row['lat']},{row['lng']}&travelmode=driving"
             st.markdown(f'<a href="{map_link}" target="_blank"><button style="background-color:#4CAF50; color:white; padding:6px 12px; border:none; border-radius:4px; cursor:pointer; font-size:14px; font-weight:bold;">🚗 Πλοήγηση</button></a>', unsafe_allow_html=True)
         st.divider()
