@@ -23,7 +23,7 @@ default_input = "Λεωφόρος Δημοκρατίας 1, Λυκόβρυση (
 user_input = st.text_area("1η γραμμή = Αφετηρία | Οι υπόλοιπες = Στάσεις Παράδοσης (Γράψτε οδό, αριθμό και περιοχή π.χ. Λυκόβρυση):", value=default_input, height=150)
 
 if st.button("Υπολογισμός Βέλτιστης Διαδρομής"):
-    lines = [line.strip() for line in user_input.split("\n"] if line.strip()] # type: ignore
+    lines = [line.strip() for line in user_input.split("\n") if line.strip()] # type: ignore
     # Διόρθωση λίστας γραμμών
     lines = [line.strip() for line in user_input.split("\n") if line.strip()]
     
